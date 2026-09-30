@@ -1,0 +1,55 @@
+name: Convert Excel files to CSV
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install openpyxl
+
+      - name: Convert XLSX to CSV
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import csv
+          from openpyxl import load_workbook
+
+          root = Path(".")
+          for xlsx in root.glob("*.xlsx"):
+              wb = load_workbook(xlsx, data_only=True)
+              for ws in wb.worksheets:
+                  out = root / f"{xlsx.stem} - {ws.title}.csv"
+                  with out.open("w", encoding="utf-8-sig", newline="") as f:
+                      writer = csv.writer(f, delimiter=";")
+                      for row in ws.iter_rows(values_only=True):
+                          writer.writerow(["" if v is None else v for v in row])
+
+          PY
+
+      - name: Commit CSV files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "*.csv"
+          if git diff --cached --quiet; then
+            echo "No CSV changes"
+          else
+            git commit -m "Add CSV copies of Excel source data"
+            git push
+          fi
